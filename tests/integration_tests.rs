@@ -234,13 +234,13 @@ impl McpTestContext {
             return Err(anyhow::anyhow!("tools/list failed: {:?}", error));
         }
 
-        if let Some(result) = response.get("result")
-            && let Some(tools) = result.get("tools").and_then(|t| t.as_array())
-        {
-            return Ok(tools
-                .iter()
-                .filter_map(|tool| tool.get("name")?.as_str().map(String::from))
-                .collect());
+        if let Some(result) = response.get("result") {
+            if let Some(tools) = result.get("tools").and_then(|t| t.as_array()) {
+                return Ok(tools
+                    .iter()
+                    .filter_map(|tool| tool.get("name")?.as_str().map(String::from))
+                    .collect());
+            }
         }
 
         Err(anyhow::anyhow!("Invalid tools/list response"))
@@ -305,10 +305,10 @@ impl McpTestContext {
         let result = self.call_tool("create_page", Some(args)).await?;
 
         // Check if the result indicates an error
-        if let Some(is_error) = result.get("isError")
-            && is_error.as_bool().unwrap_or(false)
-        {
-            return Err(anyhow::anyhow!("create_page tool failed"));
+        if let Some(is_error) = result.get("isError") {
+            if is_error.as_bool().unwrap_or(false) {
+                return Err(anyhow::anyhow!("create_page tool failed"));
+            }
         }
 
         self.created_pages.push(page_name.clone());
@@ -335,28 +335,32 @@ impl McpTestContext {
         match self.call_tool("create_block", Some(args)).await {
             Ok(result) => {
                 // Check if the result indicates an error
-                if let Some(is_error) = result.get("isError")
-                    && is_error.as_bool().unwrap_or(false)
-                {
-                    println!("  ⚠ Block creation failed (expected API limitation)");
-                    return Ok(None);
+                if let Some(is_error) = result.get("isError") {
+                    if is_error.as_bool().unwrap_or(false) {
+                        println!("  ⚠ Block creation failed (expected API limitation)");
+                        return Ok(None);
+                    }
                 }
 
                 // Try to extract UUID from the response content
-                if let Some(content) = result.get("content").and_then(|c| c.as_array())
-                    && let Some(first_content) = content.first()
-                    && let Some(raw) = first_content.get("raw")
-                    && let Some(text) = raw.get("text").and_then(|t| t.as_str())
-                    && let Some(uuid_start) = text.find("UUID: ")
-                {
-                    let uuid_part = &text[uuid_start + 6..];
-                    if let Some(uuid_end) = uuid_part.find(char::is_whitespace) {
-                        let uuid = uuid_part[..uuid_end].to_string();
-                        self.created_blocks.push(uuid.clone());
-                        println!("  📝 Created test block: {}", uuid);
-                        return Ok(Some(uuid));
+                if let Some(content) = result.get("content").and_then(|c| c.as_array()) {
+                    if let Some(first_content) = content.first() {
+                        if let Some(raw) = first_content.get("raw") {
+                            if let Some(text) = raw.get("text").and_then(|t| t.as_str()) {
+                                if let Some(uuid_start) = text.find("UUID: ") {
+                                    let uuid_part = &text[uuid_start + 6..];
+                                    if let Some(uuid_end) = uuid_part.find(char::is_whitespace) {
+                                        let uuid = uuid_part[..uuid_end].to_string();
+                                        self.created_blocks.push(uuid.clone());
+                                        println!("  📝 Created test block: {}", uuid);
+                                        return Ok(Some(uuid));
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
+
                 println!("  📝 Block created but UUID not parsed from response");
                 Ok(None)
             }
@@ -387,56 +391,60 @@ impl McpTestContext {
             .await
         {
             Ok(result) => {
-                if let Some(content) = result.get("content").and_then(|c| c.as_array())
-                    && let Some(first_content) = content.first()
-                    && let Some(text) = first_content.get("text").and_then(|t| t.as_str())
-                {
-                    println!("    📝 DataScript response text: {}", text);
-                    if let Ok(query_data) = serde_json::from_str::<Value>(text) {
-                        println!("    📝 Parsed query data: {:?}", query_data);
-                        if let Some(results) = query_data.as_array() {
-                            println!("    📝 Results array: {:?}", results);
-                            if !results.is_empty() {
-                                println!(
-                                    "    🧹 Found {} MCP-TEST pages to clean up",
-                                    results.len()
-                                );
-                                println!("    📋 Pages found: {:?}", results);
+                if let Some(content) = result.get("content").and_then(|c| c.as_array()) {
+                    if let Some(first_content) = content.first() {
+                        if let Some(text) = first_content.get("text").and_then(|t| t.as_str()) {
+                            println!("    📝 DataScript response text: {}", text);
+                            if let Ok(query_data) = serde_json::from_str::<Value>(text) {
+                                println!("    📝 Parsed query data: {:?}", query_data);
+                                if let Some(results) = query_data.as_array() {
+                                    println!("    📝 Results array: {:?}", results);
+                                    if !results.is_empty() {
+                                        println!(
+                                            "    🧹 Found {} MCP-TEST pages to clean up",
+                                            results.len()
+                                        );
+                                        println!("    📋 Pages found: {:?}", results);
 
-                                for result_row in results {
-                                    if let Some(row) = result_row.as_array()
-                                        && let Some(page_name) =
-                                            row.first().and_then(|n| n.as_str())
-                                    {
-                                        let delete_args = json!({
-                                            "page_name": page_name
-                                        });
+                                        for result_row in results {
+                                            if let Some(row) = result_row.as_array() {
+                                                if let Some(page_name) =
+                                                    row.first().and_then(|n| n.as_str())
+                                                {
+                                                    let delete_args = json!({
+                                                        "page_name": page_name
+                                                    });
 
-                                        match self.call_tool("delete_page", Some(delete_args)).await
-                                        {
-                                            Ok(_) => {
-                                                println!(
-                                                    "      ✓ Deleted MCP-TEST page: {}",
-                                                    page_name
-                                                );
-                                            }
-                                            Err(e) => {
-                                                println!(
-                                                    "      ⚠ Failed to delete MCP-TEST page {}: {}",
-                                                    page_name, e
-                                                );
+                                                    match self
+                                                        .call_tool("delete_page", Some(delete_args))
+                                                        .await
+                                                    {
+                                                        Ok(_) => {
+                                                            println!(
+                                                                "      ✓ Deleted MCP-TEST page: {}",
+                                                                page_name
+                                                            );
+                                                        }
+                                                        Err(e) => {
+                                                            println!(
+                                                                "      ⚠ Failed to delete MCP-TEST page {}: {}",
+                                                                page_name, e
+                                                            );
+                                                        }
+                                                    }
+                                                }
                                             }
                                         }
+                                    } else {
+                                        println!("    ✓ No MCP-TEST pages found to clean up");
                                     }
+                                } else {
+                                    println!("    ✓ No MCP-TEST pages found to clean up");
                                 }
                             } else {
                                 println!("    ✓ No MCP-TEST pages found to clean up");
                             }
-                        } else {
-                            println!("    ✓ No MCP-TEST pages found to clean up");
                         }
-                    } else {
-                        println!("    ✓ No MCP-TEST pages found to clean up");
                     }
                 }
             }
@@ -473,86 +481,95 @@ impl McpTestContext {
             .await
         {
             Ok(result) => {
-                if let Some(content) = result.get("content").and_then(|c| c.as_array())
-                    && let Some(first_content) = content.first()
-                    && let Some(text) = first_content.get("text").and_then(|t| t.as_str())
-                {
-                    if let Ok(query_data) = serde_json::from_str::<Value>(text) {
-                        if let Some(results) = query_data.as_array() {
-                            if !results.is_empty() {
-                                println!(
-                                    "    🧹 Found {} test blocks with test-id property",
-                                    results.len()
-                                );
+                if let Some(content) = result.get("content").and_then(|c| c.as_array()) {
+                    if let Some(first_content) = content.first() {
+                        if let Some(text) = first_content.get("text").and_then(|t| t.as_str()) {
+                            if let Ok(query_data) = serde_json::from_str::<Value>(text) {
+                                if let Some(results) = query_data.as_array() {
+                                    if !results.is_empty() {
+                                        println!(
+                                            "    🧹 Found {} test blocks with test-id property",
+                                            results.len()
+                                        );
 
-                                // Check if these blocks are orphaned (not on test pages that will be deleted)
-                                let mut truly_orphaned_blocks = Vec::new();
+                                        // Check if these blocks are orphaned (not on test pages that will be deleted)
+                                        let mut truly_orphaned_blocks = Vec::new();
 
-                                for result_row in results {
-                                    if let Some(row) = result_row.as_array()
-                                        && let (Some(uuid), Some(page_name)) = (
-                                            row.first().and_then(|u| u.as_str()),
-                                            row.get(2).and_then(|p| p.as_str()),
-                                        )
-                                    {
-                                        let uuid_string = uuid.to_string();
-                                        let page_name_string = page_name.to_string();
+                                        for result_row in results {
+                                            if let Some(row) = result_row.as_array() {
+                                                if let (Some(uuid), Some(page_name)) = (
+                                                    row.first().and_then(|u| u.as_str()),
+                                                    row.get(2).and_then(|p| p.as_str()),
+                                                ) {
+                                                    let uuid_string = uuid.to_string();
+                                                    let page_name_string = page_name.to_string();
 
-                                        // Check if this block is on a test page that we'll delete anyway
-                                        let on_test_page =
-                                            self.created_pages.iter().any(|test_page| {
-                                                test_page == &page_name_string
-                                                    || page_name_string.starts_with(&format!(
-                                                        "test-{}",
-                                                        &self.test_id[..8]
-                                                    ))
-                                            });
+                                                    // Check if this block is on a test page that we'll delete anyway
+                                                    let on_test_page = self
+                                                        .created_pages
+                                                        .iter()
+                                                        .any(|test_page| {
+                                                            test_page == &page_name_string
+                                                                || page_name_string.starts_with(
+                                                                    &format!(
+                                                                        "test-{}",
+                                                                        &self.test_id[..8]
+                                                                    ),
+                                                                )
+                                                        });
 
-                                        if on_test_page {
+                                                    if on_test_page {
+                                                        println!(
+                                                            "      📝 Test block {} on test page {} (will be cleaned with page)",
+                                                            uuid, page_name
+                                                        );
+                                                    } else {
+                                                        // This is truly orphaned - not on a test page we'll delete
+                                                        println!(
+                                                            "      ⚠ Orphaned test block {} on non-test page: {}",
+                                                            uuid, page_name
+                                                        );
+                                                        truly_orphaned_blocks.push(uuid_string);
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        // Add truly orphaned blocks to our cleanup list
+                                        for orphaned_uuid in truly_orphaned_blocks {
+                                            if !self.created_blocks.contains(&orphaned_uuid) {
+                                                self.created_blocks.push(orphaned_uuid.clone());
+                                                println!(
+                                                    "      ➕ Added orphaned block {} to cleanup list",
+                                                    orphaned_uuid
+                                                );
+                                            }
+                                        }
+
+                                        if self.created_blocks.is_empty() {
                                             println!(
-                                                "      📝 Test block {} on test page {} (will be cleaned with page)",
-                                                uuid, page_name
+                                                "      ✓ All test blocks are on test pages (will be cleaned up with pages)"
                                             );
                                         } else {
-                                            // This is truly orphaned - not on a test page we'll delete
                                             println!(
-                                                "      ⚠ Orphaned test block {} on non-test page: {}",
-                                                uuid, page_name
+                                                "      ✓ Added {} orphaned blocks to cleanup list",
+                                                self.created_blocks.len()
                                             );
-                                            truly_orphaned_blocks.push(uuid_string);
                                         }
-                                    }
-                                }
-
-                                // Add truly orphaned blocks to our cleanup list
-                                for orphaned_uuid in truly_orphaned_blocks {
-                                    if !self.created_blocks.contains(&orphaned_uuid) {
-                                        self.created_blocks.push(orphaned_uuid.clone());
+                                    } else {
                                         println!(
-                                            "      ➕ Added orphaned block {} to cleanup list",
-                                            orphaned_uuid
+                                            "    ✓ No test blocks found with test-id property"
                                         );
                                     }
-                                }
-
-                                if self.created_blocks.is_empty() {
-                                    println!(
-                                        "      ✓ All test blocks are on test pages (will be cleaned up with pages)"
-                                    );
                                 } else {
                                     println!(
-                                        "      ✓ Added {} orphaned blocks to cleanup list",
-                                        self.created_blocks.len()
+                                        "    ⚠ Could not parse DataScript query result as array"
                                     );
                                 }
                             } else {
-                                println!("    ✓ No test blocks found with test-id property");
+                                println!("    ⚠ Could not parse DataScript query result as JSON");
                             }
-                        } else {
-                            println!("    ⚠ Could not parse DataScript query result as array");
                         }
-                    } else {
-                        println!("    ⚠ Could not parse DataScript query result as JSON");
                     }
                 }
             }
@@ -581,30 +598,36 @@ impl McpTestContext {
             .await
         {
             Ok(result) => {
-                if let Some(content) = result.get("content").and_then(|c| c.as_array())
-                    && let Some(first_content) = content.first()
-                    && let Some(text) = first_content.get("text").and_then(|t| t.as_str())
-                {
-                    if let Ok(query_data) = serde_json::from_str::<Value>(text) {
-                        if let Some(results) = query_data.as_array() {
-                            if !results.is_empty() {
-                                println!(
-                                    "    📝 Content search found {} additional test blocks (handled by property-based search)",
-                                    results.len()
-                                );
+                if let Some(content) = result.get("content").and_then(|c| c.as_array()) {
+                    if let Some(first_content) = content.first() {
+                        if let Some(text) = first_content.get("text").and_then(|t| t.as_str()) {
+                            if let Ok(query_data) = serde_json::from_str::<Value>(text) {
+                                if let Some(results) = query_data.as_array() {
+                                    if !results.is_empty() {
+                                        println!(
+                                            "    📝 Content search found {} additional test blocks (handled by property-based search)",
+                                            results.len()
+                                        );
+                                    } else {
+                                        println!(
+                                            "    ✓ No additional test blocks found via content search"
+                                        );
+                                    }
+                                } else {
+                                    println!(
+                                        "    ✓ No additional test blocks found via content search"
+                                    );
+                                }
                             } else {
                                 println!(
                                     "    ✓ No additional test blocks found via content search"
                                 );
                             }
-                        } else {
-                            println!("    ✓ No additional test blocks found via content search");
                         }
-                    } else {
-                        println!("    ✓ No additional test blocks found via content search");
                     }
                 }
             }
+
             Err(e) => {
                 println!("    ⚠ Content search failed: {}", e);
             }
@@ -808,20 +831,21 @@ async fn test_mcp_list_pages_tool() -> Result<()> {
 
     // Verify we got a proper result
     if let Some(content) = result.get("content").and_then(|c| c.as_array()) {
-        if let Some(first_content) = content.first()
-            && let Some(text) = first_content
+        if let Some(first_content) = content.first() {
+            if let Some(text) = first_content
                 .get("raw")
                 .and_then(|r| r.get("text"))
                 .and_then(|t| t.as_str())
-        {
-            println!(
-                "  ✓ list_pages returned {} characters of content",
-                text.len()
-            );
-            assert!(
-                !text.is_empty(),
-                "list_pages should return non-empty content"
-            );
+            {
+                println!(
+                    "  ✓ list_pages returned {} characters of content",
+                    text.len()
+                );
+                assert!(
+                    !text.is_empty(),
+                    "list_pages should return non-empty content"
+                );
+            }
         }
     } else {
         return Err(anyhow::anyhow!(
@@ -856,17 +880,18 @@ async fn test_mcp_create_and_get_page() -> Result<()> {
 
     // Verify the result structure
     if let Some(content) = result.get("content").and_then(|c| c.as_array()) {
-        if let Some(first_content) = content.first()
-            && let Some(text) = first_content
+        if let Some(first_content) = content.first() {
+            if let Some(text) = first_content
                 .get("raw")
                 .and_then(|r| r.get("text"))
                 .and_then(|t| t.as_str())
-        {
-            println!("  ✓ get_page returned page data: {} characters", text.len());
-            assert!(
-                text.contains(&page_name),
-                "Response should contain page name"
-            );
+            {
+                println!("  ✓ get_page returned page data: {} characters", text.len());
+                assert!(
+                    text.contains(&page_name),
+                    "Response should contain page name"
+                );
+            }
         }
     } else {
         return Err(anyhow::anyhow!(
@@ -937,14 +962,16 @@ async fn test_mcp_search_tool() -> Result<()> {
     let result = ctx.call_tool("search", Some(search_args)).await?;
 
     // Verify we got a search result
-    if let Some(content) = result.get("content").and_then(|c| c.as_array())
-        && let Some(first_content) = content.first()
-        && let Some(text) = first_content
-            .get("raw")
-            .and_then(|r| r.get("text"))
-            .and_then(|t| t.as_str())
-    {
-        println!("  ✓ search returned {} characters of results", text.len());
+    if let Some(content) = result.get("content").and_then(|c| c.as_array()) {
+        if let Some(first_content) = content.first() {
+            if let Some(text) = first_content
+                .get("raw")
+                .and_then(|r| r.get("text"))
+                .and_then(|t| t.as_str())
+            {
+                println!("  ✓ search returned {} characters of results", text.len());
+            }
+        }
     }
 
     ctx.cleanup().await;
@@ -963,44 +990,56 @@ async fn test_mcp_update_block() -> Result<()> {
 
     let query_result = ctx.call_tool("datascript_query", Some(query_args)).await?;
 
-    if let Some(content) = query_result.get("content").and_then(|c| c.as_array())
-        && let Some(first_content) = content.first()
-        && let Some(text) = first_content
-            .get("raw")
-            .and_then(|r| r.get("text"))
-            .and_then(|t| t.as_str())
-    {
-        // Try to parse the JSON result to get a block UUID
-        if let Ok(query_data) = serde_json::from_str::<Value>(text)
-            && let Some(results) = query_data.as_array()
-            && let Some(first_result) = results.first()
-            && let Some(result_array) = first_result.as_array()
-        {
-            if let Some(uuid) = result_array.first().and_then(|u| u.as_str()) {
-                // Test updating this block
-                let update_content = ctx.test_content("Updated via MCP integration test");
-                let update_args = json!({
-                    "uuid": uuid,
-                    "content": update_content,
-                    "properties": {
-                        "updated-via": "mcp-test",
-                        "test-id": ctx.test_id
-                    }
-                });
+    if let Some(content) = query_result.get("content").and_then(|c| c.as_array()) {
+        if let Some(first_content) = content.first() {
+            if let Some(text) = first_content
+                .get("raw")
+                .and_then(|r| r.get("text"))
+                .and_then(|t| t.as_str())
+            {
+                // Try to parse the JSON result to get a block UUID
+                if let Ok(query_data) = serde_json::from_str::<Value>(text) {
+                    if let Some(results) = query_data.as_array() {
+                        if let Some(first_result) = results.first() {
+                            if let Some(result_array) = first_result.as_array() {
+                                if let Some(uuid) = result_array.first().and_then(|u| u.as_str()) {
+                                    // Test updating this block
+                                    let update_content =
+                                        ctx.test_content("Updated via MCP integration test");
+                                    let update_args = json!({
+                                        "uuid": uuid,
+                                        "content": update_content,
+                                        "properties": {
+                                            "updated-via": "mcp-test",
+                                            "test-id": ctx.test_id
+                                        }
+                                    });
 
-                let update_result = ctx.call_tool("update_block", Some(update_args)).await?;
+                                    let update_result =
+                                        ctx.call_tool("update_block", Some(update_args)).await?;
 
-                if let Some(is_error) = update_result.get("isError") {
-                    if !is_error.as_bool().unwrap_or(false) {
-                        println!("  ✓ update_block succeeded on existing block");
-                    } else {
-                        println!("  ⚠ update_block failed (may be API limitation)");
+                                    if let Some(is_error) = update_result.get("isError") {
+                                        if !is_error.as_bool().unwrap_or(false) {
+                                            println!(
+                                                "  ✓ update_block succeeded on existing block"
+                                            );
+                                        } else {
+                                            println!(
+                                                "  ⚠ update_block failed (may be API limitation)"
+                                            );
+                                        }
+                                    } else {
+                                        println!("  ✓ update_block completed");
+                                    }
+                                } else {
+                                    println!(
+                                        "  ⚠ Could not extract UUID from datascript query result"
+                                    );
+                                }
+                            }
+                        }
                     }
-                } else {
-                    println!("  ✓ update_block completed");
                 }
-            } else {
-                println!("  ⚠ Could not extract UUID from datascript query result");
             }
         }
     }
@@ -1099,26 +1138,43 @@ async fn test_mcp_delete_operations() -> Result<()> {
         .await
     {
         Ok(query_result) => {
-            if let Some(content) = query_result.get("content").and_then(|c| c.as_array())
-                && let Some(first_content) = content.first()
-                && let Some(text) = first_content
-                    .get("raw")
-                    .and_then(|r| r.get("text"))
-                    .and_then(|t| t.as_str())
-                && let Ok(query_data) = serde_json::from_str::<Value>(text)
-                && let Some(results) = query_data.as_array()
-                && let Some(first_result) = results.first()
-                && let Some(result_array) = first_result.as_array()
-                && let Some(uuid) = result_array.first().and_then(|u| u.as_str())
-            {
-                println!("   ⚠ Found existing block UUID for delete test: {}", uuid);
+            if let Some(content) = query_result.get("content").and_then(|c| c.as_array()) {
+                if let Some(first_content) = content.first() {
+                    if let Some(text) = first_content
+                        .get("raw")
+                        .and_then(|r| r.get("text"))
+                        .and_then(|t| t.as_str())
+                    {
+                        if let Ok(query_data) = serde_json::from_str::<Value>(text) {
+                            if let Some(results) = query_data.as_array() {
+                                if let Some(first_result) = results.first() {
+                                    if let Some(result_array) = first_result.as_array() {
+                                        if let Some(uuid) =
+                                            result_array.first().and_then(|u| u.as_str())
+                                        {
+                                            println!(
+                                                "   ⚠ Found existing block UUID for delete test: {}",
+                                                uuid
+                                            );
 
-                // Test delete_block with warning (we won't actually delete)
-                println!("3. Testing delete_block tool availability (not executing)");
-                // We don't actually delete the block to avoid data loss
-                println!("   ⚠ Skipping actual block deletion to prevent data loss");
+                                            // Test delete_block with warning (we won't actually delete)
+                                            println!(
+                                                "3. Testing delete_block tool availability (not executing)"
+                                            );
+                                            // We don't actually delete the block to avoid data loss
+                                            println!(
+                                                "   ⚠ Skipping actual block deletion to prevent data loss"
+                                            );
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
+
         Err(e) => {
             println!("   ⚠ Could not find existing blocks: {}", e);
         }
@@ -1147,42 +1203,45 @@ async fn test_mcp_find_incomplete_todos() -> Result<()> {
 
     match ctx.call_tool("find_incomplete_todos", None).await {
         Ok(result) => {
-            if let Some(content) = result.get("content").and_then(|c| c.as_array())
-                && let Some(first_content) = content.first()
-                && let Some(text) = first_content
-                    .get("raw")
-                    .and_then(|r| r.get("text"))
-                    .and_then(|t| t.as_str())
-            {
-                println!(
-                    "   ✓ find_incomplete_todos returned {} characters of content",
-                    text.len()
-                );
+            if let Some(content) = result.get("content").and_then(|c| c.as_array()) {
+                if let Some(first_content) = content.first() {
+                    if let Some(text) = first_content
+                        .get("raw")
+                        .and_then(|r| r.get("text"))
+                        .and_then(|t| t.as_str())
+                    {
+                        println!(
+                            "   ✓ find_incomplete_todos returned {} characters of content",
+                            text.len()
+                        );
 
-                // Check if we found any todos or got the "No incomplete todos" message
-                if text.contains("Found") && text.contains("incomplete todos") {
-                    let lines: Vec<&str> = text.lines().collect();
-                    if let Some(first_line) = lines.first() {
-                        println!("   ✓ {}", first_line);
-                    }
+                        // Check if we found any todos or got the "No incomplete todos" message
+                        if text.contains("Found") && text.contains("incomplete todos") {
+                            let lines: Vec<&str> = text.lines().collect();
+                            if let Some(first_line) = lines.first() {
+                                println!("   ✓ {}", first_line);
+                            }
 
-                    // Look for todo markers
-                    let markers = ["TODO", "DOING", "LATER", "NOW", "WAITING"];
-                    for marker in markers {
-                        if text.contains(marker) {
-                            println!("   ✓ Found {} todos", marker);
+                            // Look for todo markers
+                            let markers = ["TODO", "DOING", "LATER", "NOW", "WAITING"];
+                            for marker in markers {
+                                if text.contains(marker) {
+                                    println!("   ✓ Found {} todos", marker);
+                                }
+                            }
+                        } else if text.contains("No incomplete todos found") {
+                            println!("   ✓ No incomplete todos found (empty result is valid)");
+                        } else {
+                            println!(
+                                "   ⚠ Unexpected response format: {}",
+                                &text[..std::cmp::min(100, text.len())]
+                            );
                         }
                     }
-                } else if text.contains("No incomplete todos found") {
-                    println!("   ✓ No incomplete todos found (empty result is valid)");
-                } else {
-                    println!(
-                        "   ⚠ Unexpected response format: {}",
-                        &text[..std::cmp::min(100, text.len())]
-                    );
                 }
             }
         }
+
         Err(e) => {
             println!("   ⚠ find_incomplete_todos failed: {}", e);
         }
@@ -1335,9 +1394,7 @@ async fn test_large_markdown_block_creation() -> Result<()> {
 
     // Step 1: Create a test page
     println!("1. Creating test page for large markdown");
-    let page_name = ctx
-        .create_test_page("large-markdown-test", None)
-        .await?;
+    let page_name = ctx.create_test_page("large-markdown-test", None).await?;
     println!("   ✓ Created test page: {}", page_name);
 
     // Step 2: Create a large markdown block with various formatting
@@ -1457,10 +1514,10 @@ Total character count: ~2000+ characters"#;
         "content": large_markdown,
         "parent": page_name.clone()
     });
-    
+
     let create_result = ctx.call_tool("create_block", Some(create_args)).await?;
     println!("   Block creation result: {:?}", create_result);
-    
+
     // Extract UUID if available
     let uuid = if let Some(content) = create_result.get("content") {
         if let Some(text) = content
@@ -1487,31 +1544,58 @@ Total character count: ~2000+ characters"#;
         let get_args = json!({"uuid": uuid});
         match ctx.call_tool("get_block", Some(get_args)).await {
             Ok(result) => {
-                if let Some(content_arr) = result.get("content").and_then(|c| c.as_array())
-                    && let Some(text_obj) = content_arr.first()
-                    && let Some(text) = text_obj.get("text").and_then(|t| t.as_str())
-                    && let Ok(block_json) = serde_json::from_str::<serde_json::Value>(text)
-                    && let Some(content) = block_json.get("content").and_then(|c| c.as_str())
-                {
-                    let content_len = content.len();
-                    println!("   ✓ Retrieved block with {} characters", content_len);
-                    
-                    // Verify key elements are present
-                    let has_heading = content.contains("# Comprehensive Markdown Test");
-                    let has_code_block = content.contains("```rust");
-                    let has_table = content.contains("| Language |");
-                    let has_math = content.contains("$E = mc^2$");
-                    let has_emoji = content.contains("🚀");
-                    
-                    println!("   Content verification:");
-                    println!("     - Main heading: {}", if has_heading { "✓" } else { "✗" });
-                    println!("     - Code blocks: {}", if has_code_block { "✓" } else { "✗" });
-                    println!("     - Tables: {}", if has_table { "✓" } else { "✗" });
-                    println!("     - Math expressions: {}", if has_math { "✓" } else { "✗" });
-                    println!("     - Emojis: {}", if has_emoji { "✓" } else { "✗" });
-                    
-                    if !has_heading || !has_code_block {
-                        println!("   ⚠️  Some content may have been truncated or split");
+                if let Some(content_arr) = result.get("content").and_then(|c| c.as_array()) {
+                    if let Some(text_obj) = content_arr.first() {
+                        if let Some(text) = text_obj.get("text").and_then(|t| t.as_str()) {
+                            if let Ok(block_json) = serde_json::from_str::<serde_json::Value>(text)
+                            {
+                                if let Some(content) =
+                                    block_json.get("content").and_then(|c| c.as_str())
+                                {
+                                    let content_len = content.len();
+                                    println!(
+                                        "   ✓ Retrieved block with {} characters",
+                                        content_len
+                                    );
+
+                                    // Verify key elements are present
+                                    let has_heading =
+                                        content.contains("# Comprehensive Markdown Test");
+                                    let has_code_block = content.contains("```rust");
+                                    let has_table = content.contains("| Language |");
+                                    let has_math = content.contains("$E = mc^2$");
+                                    let has_emoji = content.contains("🚀");
+
+                                    println!("   Content verification:");
+                                    println!(
+                                        "     - Main heading: {}",
+                                        if has_heading { "✓" } else { "✗" }
+                                    );
+                                    println!(
+                                        "     - Code blocks: {}",
+                                        if has_code_block { "✓" } else { "✗" }
+                                    );
+                                    println!(
+                                        "     - Tables: {}",
+                                        if has_table { "✓" } else { "✗" }
+                                    );
+                                    println!(
+                                        "     - Math expressions: {}",
+                                        if has_math { "✓" } else { "✗" }
+                                    );
+                                    println!(
+                                        "     - Emojis: {}",
+                                        if has_emoji { "✓" } else { "✗" }
+                                    );
+
+                                    if !has_heading || !has_code_block {
+                                        println!(
+                                            "   ⚠️  Some content may have been truncated or split"
+                                        );
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
                 println!("   ✓ Block content retrieved and verified");
@@ -1526,12 +1610,13 @@ Total character count: ~2000+ characters"#;
 
     // Step 4: Test creating another block with special characters
     println!("4. Testing block with special characters and escaping");
-    let special_content = r#"Special characters test: "quotes" & 'apostrophes' <tags> \backslash\ `backticks`"#;
+    let special_content =
+        r#"Special characters test: "quotes" & 'apostrophes' <tags> \backslash\ `backticks`"#;
     let special_args = json!({
         "content": special_content,
         "parent": page_name.clone()
     });
-    
+
     match ctx.call_tool("create_block", Some(special_args)).await {
         Ok(_) => println!("   ✓ Special characters block created successfully"),
         Err(e) => println!("   ⚠️  Failed to create special characters block: {}", e),

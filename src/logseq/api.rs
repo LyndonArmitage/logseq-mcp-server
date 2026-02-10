@@ -276,26 +276,27 @@ impl LogSeqClient {
 
         if let Some(results_array) = result.as_array() {
             for result_row in results_array {
-                if let Some(row) = result_row.as_array()
-                    && row.len() >= 2
-                    && let (Some(uuid), Some(content)) = (
-                        row[0].as_str().map(String::from),
-                        row[1].as_str().map(String::from),
-                    )
-                {
-                    let block = Block {
-                        uuid,
-                        content,
-                        page: None, // We don't have page info from this query
-                        properties: None,
-                        children: vec![],
-                        level: None,
-                        format: None,
-                    };
-                    search_results.push(SearchResult {
-                        block,
-                        score: None, // DataScript doesn't provide scoring
-                    });
+                if let Some(row) = result_row.as_array() {
+                    if row.len() >= 2 {
+                        if let (Some(uuid), Some(content)) = (
+                            row[0].as_str().map(String::from),
+                            row[1].as_str().map(String::from),
+                        ) {
+                            let block = Block {
+                                uuid,
+                                content,
+                                page: None, // We don't have page info from this query
+                                properties: None,
+                                children: vec![],
+                                level: None,
+                                format: None,
+                            };
+                            search_results.push(SearchResult {
+                                block,
+                                score: None, // DataScript doesn't provide scoring
+                            });
+                        }
+                    }
                 }
             }
         }
@@ -418,22 +419,23 @@ impl LogSeqClient {
 
         if let Some(results_array) = result.as_array() {
             for result_row in results_array {
-                if let Some(row) = result_row.as_array()
-                    && row.len() >= 4
-                    && let (Some(uuid), Some(content), Some(marker), Some(page_name)) = (
-                        row[0].as_str().map(String::from),
-                        row[1].as_str().map(String::from),
-                        row[2].as_str().map(String::from),
-                        row[3].as_str().map(String::from),
-                    )
-                {
-                    todos.push(TodoItem {
-                        uuid,
-                        content,
-                        marker,
-                        page_name,
-                        priority: None, // Could be extended to include priority
-                    });
+                if let Some(row) = result_row.as_array() {
+                    if row.len() >= 4 {
+                        if let (Some(uuid), Some(content), Some(marker), Some(page_name)) = (
+                            row[0].as_str().map(String::from),
+                            row[1].as_str().map(String::from),
+                            row[2].as_str().map(String::from),
+                            row[3].as_str().map(String::from),
+                        ) {
+                            todos.push(TodoItem {
+                                uuid,
+                                content,
+                                marker,
+                                page_name,
+                                priority: None, // Could be extended to include priority
+                            });
+                        }
+                    }
                 }
             }
         }
